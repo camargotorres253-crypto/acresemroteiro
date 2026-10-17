@@ -1,0 +1,35 @@
+# Setup e evidências
+
+## Origem e contexto
+
+[Data da verificação, revisão única do toolkit, produto, cliente e runtime. Preserve a autenticação e o modelo principal; registre a política autorizada de subagentes e os modelos/esforços observáveis, sem inventar custos. Não inclua caminhos pessoais ou credenciais.]
+
+## Decisões e fontes
+
+[Default adotado ou adaptado, motivo, documentação oficial/Context7 consultado e data. Diferencie canal estável de exemplo de prerelease. Registre exceções e critérios para revisitar.]
+
+## Componentes
+
+[Versões efetivas, gerenciador, lockfile, escopos local/global, origem e nomes das skills. Diferencie plugin instalado, arquivo presente e descoberta pelo host.]
+
+| Componente | Ação e motivo | Escopo | Estado e evidência |
+|---|---|---|---|
+| [Peça avaliada do catálogo atual] | [Instalar, atualizar, integrar, reaproveitar equivalente ou justificar inaplicabilidade/bloqueio] | [Projeto, cliente ou usuário] | [Resultado observado e pendência, se houver] |
+
+## Documentação criada
+
+[Confirme PRODUCT.md, README.md, AGENTS.md, CLAUDE.md, docs/architecture.md, docs/design.md, docs/onboarding.md e docs/quality.md com conteúdo do projeto. Registre preservação/consolidação de arquivos anteriores.]
+
+## Verificações
+
+| Item | Estado | Evidência |
+|---|---|---|
+| [Check, integração ou recurso] | [Validado / configurado sem execução / pendente] | [Comando, resultado observado ou motivo e próximo passo] |
+
+Registre lint, tipos, testes, regras, build, auditorias, HTTP, geração SQL e banco quando aplicável. Identifique recursos temporários criados e seu encerramento. Não apresente uma simulação como teste de um serviço real.
+
+Em projeto existente, compare os checks antes/depois, distinguindo falhas preexistentes de regressões. Registre verificação de reexecução sem duplicação e o que recebeu somente revisão estática.
+
+## Pendências e próxima entrega
+
+[Decisões externas, riscos conhecidos, próximo passo e menor tarefa do MVP. Indique manutenção/reexecução, quantidade sugerida de 3 a 8 ciclos posteriores de code review, motivo, focos e prompt de continuação com checks reais. Publicação e serviços externos dependem de autorização pertinente.]
