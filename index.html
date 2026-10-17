@@ -1,0 +1,431 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Acre Sem Roteiro</title>
+<meta name="description" content="Jogo de escolhas no mapa real do Acre em 3D: seja cidadão, policial, bandido ou político.">
+<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,800&family=Atkinson+Hyperlegible:wght@400;700&display=swap">
+<style>
+:root{
+  --bg:#0f1420; --panel:rgba(18,24,38,.92); --line:#2a3550; --fg:#eef1f7; --muted:#9aa4bf;
+  --amber:#ffb238; --povo:#3fbf9b; --policia:#4d8dff; --crime:#ff5a5f; --politica:#b58cff;
+  --display:"Bricolage Grotesque","Arial Black",system-ui,sans-serif;
+  --body:"Atkinson Hyperlegible",system-ui,-apple-system,sans-serif;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--fg);font-family:var(--body);font-size:15px;overflow:hidden}
+button{font:inherit;color:inherit;cursor:pointer}
+button:focus-visible{outline:2px solid var(--amber);outline-offset:2px}
+#map{position:fixed;inset:0}
+.glass{background:var(--panel);border:1px solid var(--line);border-radius:16px;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}
+/* HUD topo */
+.hud{position:fixed;top:calc(12px + env(safe-area-inset-top,0px));left:max(12px,env(safe-area-inset-left,0px));right:max(12px,env(safe-area-inset-right,0px));display:flex;gap:10px;align-items:flex-start;justify-content:space-between;pointer-events:none;z-index:5}
+.hud>*{pointer-events:auto}
+.brand{padding:10px 14px}
+h1{font-family:var(--display);font-weight:800;font-size:clamp(20px,3.4vw,28px);line-height:1;margin:0;letter-spacing:-.02em}
+h1 em{font-style:normal;color:var(--amber)}
+.tag{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.tools{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+.tool{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:8px 12px;font-size:13px}
+.tool.on{border-color:var(--amber);color:var(--amber)}
+/* painel do jogo */
+.panel{position:fixed;left:max(12px,env(safe-area-inset-left,0px));bottom:calc(12px + env(safe-area-inset-bottom,0px));width:min(430px,calc(100% - 24px));padding:16px;display:flex;flex-direction:column;gap:12px;z-index:5;max-height:calc(100% - 110px);overflow:auto}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.stat{display:flex;flex-direction:column;gap:5px;position:relative;min-width:0}
+.stat span{font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);display:flex;justify-content:space-between;gap:4px}
+.bar{height:8px;background:#26304a;border-radius:6px;overflow:hidden}
+.bar i{display:block;height:100%;background:var(--amber);transition:width .4s,background .3s}
+.bar i.warn{background:var(--crime)}
+.dot{position:absolute;top:-3px;right:0;width:7px;height:7px;border-radius:50%;background:var(--fg);opacity:0;transition:opacity .15s}
+.dot.big{width:11px;height:11px;top:-5px}.dot.on{opacity:1}
+.card{display:flex;flex-direction:column;gap:10px;touch-action:pan-y;user-select:none;position:relative;transition:transform .25s,opacity .25s}
+.card.dragging{transition:none}
+.who{display:flex;align-items:center;gap:10px}
+.who b{display:block;font-size:14px}.who small{color:var(--muted);font-size:12px}
+.text{font-family:var(--display);font-weight:500;font-size:clamp(17px,2.3vw,21px);line-height:1.25;margin:0;text-wrap:pretty}
+.choices{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.choice{background:transparent;border:1.5px solid var(--line);border-radius:12px;padding:11px;text-align:left;line-height:1.25;font-size:14px}
+.choice:hover,.choice:focus-visible{border-color:var(--amber);background:#ffb2380f}
+.choice kbd{display:block;font-size:10.5px;color:var(--muted);margin-bottom:3px;font-family:var(--body)}
+.news{border-left:3px solid var(--amber);padding:6px 10px;color:var(--muted);font-size:13px;line-height:1.4}
+.news b{color:var(--fg)}
+.meta{display:flex;justify-content:space-between;font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums;gap:8px;flex-wrap:wrap}
+.legend{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:11.5px;color:var(--muted)}
+.legend i{display:inline-block;width:9px;height:9px;border-radius:3px;margin-right:4px;vertical-align:-1px}
+/* menu / fim */
+.menu{display:flex;flex-direction:column;gap:12px}
+.roles{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.role{background:transparent;border:1.5px solid var(--line);border-radius:12px;padding:12px;text-align:left;display:flex;flex-direction:column;gap:6px}
+.role:hover,.role:focus-visible{border-color:var(--c)}
+.role b{font-family:var(--display);font-size:18px;color:var(--c)}
+.role p{margin:0;color:var(--muted);font-size:12.5px;line-height:1.35}
+.role small{font-size:11.5px;opacity:.75}
+.intro{color:var(--muted);line-height:1.5;margin:0;font-size:14px}
+.end h2{font-family:var(--display);font-size:28px;margin:0;line-height:1.05}
+.end p{margin:0;line-height:1.5;color:var(--muted)}
+.big{font-family:var(--display);font-size:48px;color:var(--amber);line-height:1}
+.path{display:flex;flex-wrap:wrap;gap:6px}
+.path span{font-size:12px;border:1px solid var(--line);border-radius:999px;padding:3px 9px}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:baseline}
+.btn{background:var(--amber);color:#1a1205;border:0;border-radius:10px;padding:11px 16px;font-weight:700}
+.btn.ghost{background:transparent;color:var(--fg);border:1.5px solid var(--line)}
+/* marcadores das cidades */
+.city{display:flex;flex-direction:column;align-items:center;gap:2px;pointer-events:none}
+.city .f{width:30px;height:30px;border-radius:9px;overflow:hidden;box-shadow:0 2px 8px #0008;border:2px solid #0f1420}
+.city .n{font-size:11px;font-weight:700;color:#fff;text-shadow:0 1px 3px #000,0 0 6px #000;white-space:nowrap}
+.city.flash .f{animation:fl .9s 2}
+@keyframes fl{50%{transform:scale(1.5);box-shadow:0 0 0 6px #fff6}}
+.me{display:flex;flex-direction:column;align-items:center;pointer-events:none}
+.me .f{width:46px;height:46px;border-radius:12px;overflow:hidden;border:3px solid var(--amber);box-shadow:0 0 0 0 #ffb238aa;animation:pulse 1.6s infinite}
+.me .n{margin-top:3px;font-size:11px;font-weight:700;background:var(--amber);color:#1a1205;padding:2px 7px;border-radius:999px}
+@keyframes pulse{70%{box-shadow:0 0 0 14px #ffb23800}100%{box-shadow:0 0 0 0 #ffb23800}}
+.maplibregl-ctrl-attrib{font-size:10px}
+@media (max-width:640px){
+  .panel{width:calc(100% - 24px);max-height:58%;padding:12px;gap:10px}
+  .stats{grid-template-columns:repeat(2,1fr)}
+  .brand{padding:8px 10px}.tool{padding:7px 9px;font-size:12px}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<div id="map"></div>
+
+<div class="hud">
+  <div class="brand glass"><h1>Acre <em>Sem Roteiro</em></h1><span class="tag" id="sub">Cada escolha muda o estado</span></div>
+  <div class="tools">
+    <button class="tool" id="tSat">Satélite</button>
+    <button class="tool on" id="t3d">Relevo 3D</button>
+    <button class="tool" id="tAll">Ver o Acre todo</button>
+  </div>
+</div>
+
+<div class="panel glass" id="panel">
+  <section id="menu" class="menu">
+    <p class="intro">Escolha quem você vai ser. Cada decisão mexe no seu dinheiro, na sua reputação, no seu poder e na sua vida, e também em quem manda em cada uma das 22 cidades do Acre. Se uma barra zerar ou estourar, acabou.</p>
+    <div class="roles" id="roles"></div>
+  </section>
+
+  <section id="game" hidden style="display:flex;flex-direction:column;gap:12px">
+    <div class="stats" id="stats"></div>
+    <div class="card" id="card">
+      <div class="who"><div id="av"></div><div><b id="who"></b><small id="whoSub"></small></div></div>
+      <p class="text" id="text"></p>
+    </div>
+    <div class="choices">
+      <button class="choice" id="cL"><kbd>← ou arraste</kbd><span></span></button>
+      <button class="choice" id="cR"><kbd>→ ou arraste</kbd><span></span></button>
+    </div>
+    <div class="news" id="news"><b>Manchete:</b> Mais um dia normal no Acre. Ou quase.</div>
+    <div class="legend">
+      <span><i style="background:var(--povo)"></i>Povo <b id="nPovo"></b></span>
+      <span><i style="background:var(--policia)"></i>Polícia <b id="nPolicia"></b></span>
+      <span><i style="background:var(--crime)"></i>Crime <b id="nCrime"></b></span>
+      <span><i style="background:var(--politica)"></i>Políticos <b id="nPolitica"></b></span>
+    </div>
+    <div class="meta"><span id="day"></span><span id="loc"></span><span id="best"></span></div>
+  </section>
+
+  <section id="end" class="end" hidden></section>
+</div>
+
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<script>
+(()=>{
+const $=s=>document.querySelector(s);
+const LS={get(k){try{return JSON.parse(localStorage.getItem(k))}catch(e){return null}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}};
+const ROLES={
+  cidadao:{n:'Cidadão',c:'var(--povo)',d:'Trabalhador comum tentando sobreviver entre boleto, cheia do rio e vizinho folgado.',s:['Dinheiro','Família','Influência','Saúde']},
+  policia:{n:'Policial',c:'var(--policia)',d:'Salário curto, viatura velha e propostas tentadoras a cada esquina.',s:['Dinheiro','Reputação','Patente','Vida']},
+  bandido:{n:'Bandido',c:'var(--crime)',d:'Subir na facção sem ser preso, traído ou apagado. Ou sair dessa vida.',s:['Dinheiro','Respeito','Poder','Vida']},
+  politico:{n:'Político',c:'var(--politica)',d:'Verba, voto e escândalo. Agradar o povo sem cair na Federal.',s:['Caixa','Aprovação','Poder','Saúde']}
+};
+const BAIRROS=[
+  ['Bosque',20,20,110,80],['Centro',140,20,110,60],['Seis de Agosto',260,20,120,80],
+  ['Cidade Nova',140,90,110,70],['Estação',20,110,110,70],['Base',260,110,120,60],
+  ['Floresta',20,190,90,90],['Tancredo',120,170,100,60],['Taquari',230,180,150,50],
+  ['Calafate',120,240,100,40],['Sobral',230,240,70,40],['Vila Acre',310,240,70,40]
+];
+
+/* card: [quem, texto, [rotulo, [d,r,i,v], extra], [rotulo, [...], extra], condição]
+   extra: set:flag, take:[dono,n], cm:[violencia,corrupcao,alegria], n:manchete */
+const C=(who,t,L,R,req,roles)=>({who,t,L,R,req,roles});
+const COMMON=[
+  C('Vizinho','Seu vizinho pede R$ 200 emprestado “pra pagar a luz”. Ele nunca devolveu nada.',
+    ['Emprestar',[-8,6,0,0],{n:'Vizinho visto comprando caixa de cerveja com dinheiro emprestado.'}],['Negar na cara',[0,-5,0,0]]),
+  C('Defesa Civil','O Rio Acre subiu de novo e a cheia chegou no seu bairro.',
+    ['Ajudar desabrigados',[-6,10,3,-5],{cm:[0,0,8],n:'Voluntários salvam famílias na cheia; cidade se une.'}],['Ficar em casa',[0,-6,0,2],{cm:[0,0,-5]}]),
+  C('Influencer','Um influencer de Rio Branco quer gravar um vídeo com você.',
+    ['Topar',[4,6,6,0],{set:'famoso',n:'Vídeo viraliza e você vira assunto no Acre inteiro.'}],['Recusar',[0,0,-3,0]]),
+  C('Grupo da família','Uma fake news está bombando no grupo da família.',
+    ['Desmentir',[0,-4,4,0]],['Repassar também',[0,3,-2,0],{cm:[0,4,0],n:'Boato se espalha e ninguém sabe mais o que é verdade.'}]),
+  C('Céu cinza','A fumaça das queimadas cobriu a cidade de novo.',
+    ['Cobrar o governo',[0,4,4,-2],{cm:[0,-2,0]}],['Ignorar e seguir',[0,0,0,-8]]),
+  C('Lanchonete da esquina','Promoção: dois X-tudo pelo preço de um. Hoje só.',
+    ['Pedir logo dois',[-4,2,0,-4]],['Marmita de casa',[3,0,0,3]]),
+  C('Festa','Tem festa no Calafate hoje e todo mundo vai.',
+    ['Ir até o fim',[-5,5,2,-5],{cm:[0,0,4]}],['Dormir cedo',[0,-3,0,5]]),
+  C('Energisa','Apagão em metade da cidade, de novo.',
+    ['Reclamar nas redes',[0,3,3,0]],['Aproveitar e dormir',[0,0,0,4]])
+];
+const DECK={
+cidadao:[
+  C('Seu chefe','Seu chefe pede pra você ficar até mais tarde. Sem hora extra.',['Ficar',[2,-3,-2,-6]],['Ir embora no horário',[-5,3,2,2]]),
+  C('Rua de casa','Levaram sua moto na frente de casa.',['Ir na delegacia',[-3,0,2,0],{take:['policia',1]}],['Pedir pro “pessoal” do bairro',[0,0,4,-3],{set:'deve_favor',take:['crime',1],n:'Moto roubada aparece de volta em menos de 24h. Ninguém viu nada.'}]),
+  C('O “pessoal”','Os caras que acharam sua moto voltaram. Querem guardar um pacote na sua casa.',['Guardar o pacote',[12,-6,4,-10],{set:'cumplice',take:['crime',1]}],['Recusar',[0,3,-6,-12]],'deve_favor'),
+  C('Polícia Civil','A polícia bateu na sua porta às 6h da manhã.',['Contar tudo',[-10,4,-8,0],{take:['policia',1],n:'Operação desmonta depósito da facção graças a morador.'}],['Negar tudo',[0,-8,0,-10]],'cumplice'),
+  C('Vereador','Um vereador oferece cesta básica em troca do seu voto.',['Aceitar a cesta',[6,-4,0,0],{set:'vendeu_voto',cm:[0,6,0]}],['Recusar',[-2,6,3,0]]),
+  C('Seu bairro','O vereador que comprou seu voto foi eleito e sumiu. A rua continua sem asfalto.',['Cobrar nas redes',[0,5,5,0]],['Deixar pra lá',[0,-5,-4,0],{cm:[0,0,-6]}],'vendeu_voto'),
+  C('Diário Oficial','Abriu concurso do Estado. A prova é em dois meses.',['Estudar de madrugada',[-3,0,5,-6],{set:'estudando'}],['Fica pra próxima',[0,0,-2,3]]),
+  C('Resultado','Saiu o resultado: você passou no concurso!',['Churrasco pra família toda',[-6,10,5,0]],['Guardar segredo',[10,-2,3,0]],'estudando'),
+  C('Sonho antigo','Você pensa em abrir sua própria lanchonete.',['Abrir com tudo',[-15,5,6,-4],{set:'empresario',cm:[0,0,4]}],['Continuar empregado',[3,0,-2,0]]),
+  C('Fiscal da prefeitura','O fiscal aparece na lanchonete e “sugere” um agrado pra não multar.',['Pagar o agrado',[-8,0,2,0],{cm:[0,6,0]}],['Denunciar',[-3,6,5,-4],{n:'Comerciante denuncia fiscal e vira herói do bairro.'}],'empresario'),
+  C('Associação de moradores','Querem que você seja o presidente da associação do bairro.',['Assumir',[0,6,10,-5],{set:'lider',take:['povo',1]}],['Não me meto',[0,-2,-4,2]]),
+  C('Político da região','Um político quer o apoio da sua associação na eleição.',['Apoiar em troca de obra',[10,-6,8,0],{take:['politica',1]}],['Lançar candidatura própria',[-10,8,12,-4],{take:['povo',1],n:'Líder comunitário se lança candidato e assusta os velhos caciques.'}],'lider')
+],
+policia:[
+  C('Comerciante','Um comerciante oferece “um cafezinho” mensal pra você passar mais na rua dele.',['Aceitar o café',[8,-3,2,0],{set:'cafe',cm:[0,5,0]}],['Recusar',[0,4,0,0]]),
+  C('Abordagem','Você para um carro na Cidade Nova. O motorista é filho de um deputado.',['Liberar',[0,-6,6,0],{set:'favor_deputado'}],['Levar pra delegacia',[0,8,-6,-4],{set:'inimigo_deputado',n:'Filho de deputado é detido em blitz; caso vira assunto na Aleac.'}]),
+  C('Comando','Você foi transferido para um posto no interior. Ninguém explica por quê.',['Aceitar',[-4,2,-8,4]],['Recorrer na justiça',[-8,4,4,-3]],'inimigo_deputado'),
+  C('Deputado','O deputado lembra de você e oferece um cargo de assessor.',['Aceitar o cargo',[14,-6,10,0],{take:['politica',1]}],['Continuar na rua',[0,3,-2,0]],'favor_deputado'),
+  C('Informante','Um carregamento grande vai passar pela BR-364 hoje à noite.',['Montar a operação',[0,10,6,-12],{take:['policia',2],cm:[-8,0,0],n:'Megaoperação na BR-364 apreende carga recorde.'}],['Fingir que não ouviu',[10,-8,0,0],{set:'omisso',take:['crime',1]}]),
+  C('Corregedoria','A Corregedoria quer conversar sobre aquela noite na BR-364.',['Entregar os colegas',[0,4,-8,-8]],['Ficar calado',[0,-6,2,-5]],'omisso'),
+  C('Parceiro de viatura','Seu parceiro exagerou numa abordagem e filmaram tudo.',['Defender ele',[0,-8,4,0],{cm:[3,0,-4]}],['Relatar o caso',[0,6,-6,-3]]),
+  C('Batalhão','Faltam viaturas e seu colete está vencido.',['Reclamar publicamente',[0,6,-4,0]],['Comprar do próprio bolso',[-10,2,0,5]]),
+  C('Sua filha','Plantão de 24h e sua filha tem apresentação na escola.',['Ir na apresentação',[0,4,-3,5]],['Ficar no plantão',[4,-2,3,-6]]),
+  C('Recado','A facção oferece mesada pra você avisar das operações.',['Aceitar',[20,-10,6,-6],{set:'x9',take:['crime',2],cm:[0,8,0]}],['Prender o mensageiro',[0,8,4,-10],{take:['policia',1]}]),
+  C('Polícia Federal','A PF chegou na cidade. Seu nome está numa lista.',['Delação premiada',[-12,2,-12,0]],['Fugir pra Bolívia',[-20,-12,-10,-4]],'x9'),
+  C('Supermercado','Assalto com refém num supermercado do Centro.',['Negociar',[0,10,4,-4],{n:'Policial negocia por 3 horas e salva refém sem disparar.'}],['Invadir',[0,4,6,-14],{cm:[4,0,0]}])
+],
+bandido:[
+  C('O chefe','O chefe manda você “cobrar” um comerciante que está devendo.',['Cobrar',[10,-4,6,-4],{take:['crime',1],cm:[5,0,-3]}],['Avisar ele pra fugir',[-4,6,-6,-6],{set:'traiu'}]),
+  C('A quebrada','Estão desconfiando de você.',['Sumir uns dias',[-6,0,-4,3]],['Encarar',[0,4,6,-10]],'traiu'),
+  C('Mestre de obras','Abriu uma vaga de emprego de verdade numa obra.',['Largar o crime',[-10,8,-10,6],{set:'regenerado',take:['povo',1],n:'Ex-integrante de facção é contratado em obra e vira exemplo no bairro.'}],['Ficar na vida',[5,0,2,-3]]),
+  C('Antigo chefe','Seu antigo chefe quer você de volta. “Ninguém sai assim.”',['Voltar',[12,-6,6,-4]],['Pedir proteção na igreja',[-4,6,-2,2]],'regenerado'),
+  C('Taquari','Uma facção rival invadiu seu território no Taquari.',['Revidar',[0,4,8,-14],{take:['crime',1],cm:[10,0,-6]}],['Negociar divisão',[-6,0,4,0]]),
+  C('Viatura','Um policial oferece “arrego” semanal pra deixar vocês em paz.',['Pagar',[-10,0,6,4],{cm:[0,6,0]}],['Recusar',[0,2,-2,-8]]),
+  C('A comunidade','Dá pra distribuir cesta básica e ganhar o bairro.',['Distribuir',[-10,12,6,0],{take:['crime',1]}],['Guardar o dinheiro',[6,-4,0,0]]),
+  C('Madrugada','Operação policial cercando a área.',['Fugir pelo mato',[0,0,-2,-6]],['Se entregar',[-6,2,-10,4],{set:'preso',take:['policia',1]}]),
+  C('Presídio','Na cadeia, a facção oferece proteção. O preço é obediência.',['Aceitar',[0,0,10,4]],['Ficar na sua',[0,2,-4,-10]],'preso'),
+  C('Candidato','Um político quer o “apoio” da facção nas eleições.',['Apoiar',[15,-4,10,0],{take:['politica',1],cm:[0,8,0],n:'Candidato tem votação estranha em bairros dominados.'}],['Recusar',[0,0,-4,0]]),
+  C('Concessionária','Dá pra comprar aquele carrão à vista.',['Comprar e postar',[-15,8,4,-6],{set:'ostentou'}],['Ficar discreto',[0,-2,0,3]]),
+  C('Seus stories','A polícia e a Receita viram seus stories.',['Apagar tudo',[0,-4,0,-4]],['Postar mais',[0,6,4,-12]],'ostentou')
+],
+politico:[
+  C('Secretaria','Chegaram R$ 2 milhões pra reformar escolas.',['Fazer a obra',[0,12,4,0],{take:['povo',1],cm:[0,-4,6],n:'Escolas reformadas antes do prazo. Pais comemoram.'}],['Desviar uma parte',[20,-6,4,-2],{set:'desvio',cm:[0,10,0]}]),
+  C('Jornalista','Um jornalista começou a investigar as escolas.',['Comprar o silêncio',[-10,0,4,0],{set:'comprou'}],['Processar ele',[-4,-6,2,0]],'desvio'),
+  C('Jornalista','Ele gravou a conversa da propina e publicou.',['Dizer que é IA',[0,-10,0,-4]],['Renunciar',[0,4,-20,4]],'comprou'),
+  C('Empreiteira','Uma empreiteira oferece doação de campanha pela ponte nova.',['Aceitar',[15,-3,8,0],{set:'ponte'}],['Licitação limpa',[-4,8,-3,0]]),
+  C('Ponte','A ponte rachou três meses depois da inauguração.',['Culpar a gestão anterior',[0,-6,2,0]],['Pedir CPI',[0,6,-8,0]],'ponte'),
+  C('Sindicato','Professores entraram em greve.',['Negociar aumento',[-8,10,-2,0],{cm:[0,0,4]}],['Cortar o ponto',[6,-12,4,0],{cm:[0,0,-6]}]),
+  C('Recado da facção','A facção oferece os votos de três bairros.',['Aceitar',[0,-2,14,-4],{set:'pacto',take:['crime',2],cm:[0,10,0]}],['Reforçar policiamento',[-6,6,-4,-6],{take:['policia',2]}]),
+  C('Recado da facção','A facção cobra: quer um aliado no comando da segurança.',['Nomear',[0,-10,6,0],{take:['crime',2]}],['Romper o pacto',[0,6,-6,-14]],'pacto'),
+  C('Marqueteiro','Inaugurar a praça com show sertanejo ou só fita e foto?',['Show grande',[-10,12,4,0],{cm:[0,0,8]}],['Só fita e foto',[0,-2,2,0]]),
+  C('Assessoria','Vazou um vídeo seu dormindo na sessão.',['Fazer piada',[0,6,2,0]],['Pedir pra tirar do ar',[0,-8,-2,0]]),
+  C('Marqueteiro','A eleição está chegando. Ele sugere atacar o adversário com fake news.',['Usar',[0,6,8,0],{set:'fake',cm:[0,6,0]}],['Campanha limpa',[-6,4,-2,0]]),
+  C('TRE','O TRE abriu processo contra você por fake news.',['Recorrer',[-10,-4,0,0]],['Culpar o marqueteiro',[0,-2,-4,0]],'fake'),
+  C('Pronto-socorro','O PS está lotado e tem gente no corredor.',['Contratar médicos',[-10,10,2,0],{cm:[0,0,4]}],['Prometer pro ano que vem',[4,-8,0,0]]),
+  C('Polícia Federal','A PF vai fazer uma operação contra corrupção e pede apoio.',['Colaborar',[0,8,-6,0],{take:['policia',1],cm:[0,-10,0]}],['Avisar os aliados',[6,-4,6,-4],{cm:[0,8,0]}])
+]};
+
+const ENDS={
+  0:['Quebrou','Sem um real no bolso, você foi vender geladinho no Terminal Urbano.'],
+  '0+':['Rico demais','Dinheiro demais chama atenção. A Receita Federal bateu na porta.'],
+  1:['Ninguém confia mais','Seu nome virou piada nos grupos. Você se mudou pra Porto Velho.'],
+  '1+':['Virou lenda','Todo mundo te ama. E quem é amado demais em Rio Branco faz inimigo.'],
+  2:['Esquecido','Sem influência nenhuma, a cidade seguiu como se você nunca tivesse existido.'],
+  '2+':['Poder demais','Você mandava em tudo. Alguém decidiu que era hora de te tirar do jogo.'],
+  3:['O corpo cobrou','Estresse, fumaça e noites sem dormir. Sua saúde não aguentou.'],
+  '3+':['Tranquilo demais','Você ficou tão em paz que largou tudo e foi morar num sítio em Xapuri.']
+};
+const CITY_ENDS={crime:['Terra sem lei','O crime tomou 16 cidades. A cidade parou de pertencer a quem mora nela.'],
+  policia:['Estado policial','A polícia controla 16 cidades. Toque de recolher todo dia às 20h.'],
+  politica:['Curral eleitoral','Os políticos dominam 16 cidades. Nenhuma eleição tem mais surpresa.'],
+  povo:['A cidade é do povo','O povo retomou 16 cidades. Você venceu: o Acre virou exemplo pro Brasil.']};
+const HEAD=['Calor de 38°C e ninguém sabe se chove amanhã.','Buraco na Getúlio Vargas completa aniversário.','Fila no Detran dá volta no quarteirão.','Igarapé transborda e vira piscina no bairro.','Preço do açaí sobe e a cidade protesta.','Mototaxista jura que viu onça na AC-40.'];
+
+/* ---------- as 22 cidades do Acre [nome, lng, lat] ---------- */
+const CIDADES=[
+ ['Rio Branco',-67.8076,-9.9747],['Cruzeiro do Sul',-72.6700,-7.6306],['Sena Madureira',-68.6569,-9.0656],
+ ['Tarauacá',-70.7656,-8.1614],['Feijó',-70.3536,-8.1642],['Brasiléia',-68.7481,-11.0164],
+ ['Epitaciolândia',-68.7342,-11.0189],['Xapuri',-68.5044,-10.6517],['Plácido de Castro',-67.1856,-10.3353],
+ ['Senador Guiomard',-67.7361,-10.1497],['Acrelândia',-66.8972,-9.8258],['Capixaba',-67.6861,-10.5731],
+ ['Porto Acre',-67.5336,-9.5878],['Bujari',-67.9550,-9.8153],['Assis Brasil',-69.5672,-10.9419],
+ ['Manoel Urbano',-69.2600,-8.8389],['Santa Rosa do Purus',-70.4900,-9.4461],['Jordão',-71.9497,-9.1931],
+ ['Marechal Thaumaturgo',-72.7997,-8.9389],['Porto Walter',-72.7439,-8.2686],['Rodrigues Alves',-72.6472,-7.7386],
+ ['Mâncio Lima',-72.8958,-7.6142]
+];
+const N=CIDADES.length, WIN=16;
+const COL={povo:'#3fbf9b',policia:'#4d8dff',crime:'#ff5a5f',politica:'#b58cff'};
+const RT={cidadao:'povo',policia:'policia',bandido:'crime',politico:'politica'};
+const ACRE=[[-74.0,-11.15],[-66.6,-7.1]];
+const norm=s=>s.normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase();
+
+function whoType(w){w=w.toLowerCase();
+  if(/pol[ií]cia|corregedoria|batalh|viatura|comando|parceiro|federal|madrugada/.test(w))return'policia';
+  if(/fac[cç]|^o chefe|quebrada|pessoal|antigo chefe|pres[ií]dio|recado/.test(w))return'crime';
+  if(/vereador|deputado|pol[ií]tico|marqueteiro|secretaria|assessoria|tre|sindicato|candidato|empreiteira|fiscal|jornalista/.test(w))return'politica';
+  return'povo';}
+function face(t,s=44){let a='';
+  if(t==='policia')a='<rect x="13" y="8" width="18" height="7" rx="2" fill="#13234a"/><rect x="10" y="14" width="24" height="3" rx="1.5" fill="#13234a"/><circle cx="22" cy="11" r="1.6" fill="#ffb238"/>';
+  if(t==='crime')a='<path d="M13 15h18v3H13z" fill="#1a1a1a"/><rect x="13" y="20" width="18" height="7" rx="2" fill="#1a1a1a"/>';
+  if(t==='politica')a='<path d="M22 31l-2.6 3 2.6 10 2.6-10z" fill="#ffb238"/><path d="M15 12q7-6 14 0" stroke="#2a2a2a" stroke-width="3" fill="none"/>';
+  if(t==='povo')a='<ellipse cx="22" cy="13" rx="12" ry="2.6" fill="#e8c77a"/><rect x="16" y="7" width="12" height="6" rx="2" fill="#e8c77a"/>';
+  return `<svg viewBox="0 0 44 44" width="${s}" height="${s}" aria-hidden="true" style="display:block"><rect width="44" height="44" rx="12" fill="${COL[t]}"/><path d="M8 44c0-9 6-14 14-14s14 5 14 14z" fill="#0f1420" opacity=".4"/><circle cx="22" cy="20" r="8" fill="#e0b48a"/><circle cx="19" cy="20" r="1" fill="#2a1a10"/><circle cx="25" cy="20" r="1" fill="#2a1a10"/>${a}</svg>`;}
+
+/* ---------- mapa real (MapLibre + OpenFreeMap + relevo + satélite) ---------- */
+let map=null,ready=false,markers=[],me=null,munGeo=null,prevMap=[];
+function initMap(){
+  if(!window.maplibregl){$('#map').innerHTML='<p style="padding:90px 20px;color:#9aa4bf">Não deu pra carregar o mapa. Confira a internet e recarregue.</p>';return;}
+  map=new maplibregl.Map({container:'map',style:'https://tiles.openfreemap.org/styles/liberty',bounds:ACRE,fitBoundsOptions:{padding:40},pitch:50,bearing:-12,maxPitch:75,attributionControl:{compact:true}});
+  map.addControl(new maplibregl.NavigationControl({visualizePitch:true}),'bottom-right');
+  map.on('load',()=>{
+    const firstSymbol=(map.getStyle().layers.find(l=>l.type==='symbol')||{}).id;
+    map.addSource('sat',{type:'raster',tiles:['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'],tileSize:256,maxzoom:18,attribution:'Imagens © Esri'});
+    map.addLayer({id:'sat',type:'raster',source:'sat',layout:{visibility:'none'}},firstSymbol);
+    map.addSource('dem',{type:'raster-dem',tiles:['https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png'],encoding:'terrarium',tileSize:256,maxzoom:13,attribution:'Relevo © Mapzen/AWS'});
+    map.addLayer({id:'hill',type:'hillshade',source:'dem',paint:{'hillshade-exaggeration':.35,'hillshade-shadow-color':'#0b0f19'}},firstSymbol);
+    map.setTerrain({source:'dem',exaggeration:3});
+    try{map.setSky&&map.setSky({'sky-color':'#0f1420','horizon-color':'#2a3550','fog-color':'#0f1420','sky-horizon-blend':.5,'horizon-fog-blend':.6});}catch(e){}
+    map.addSource('mun',{type:'geojson',data:{type:'FeatureCollection',features:[]}});
+    map.addLayer({id:'mun-fill',type:'fill',source:'mun',paint:{'fill-color':['coalesce',['get','cor'],'#888'],'fill-opacity':.32}},firstSymbol);
+    map.addLayer({id:'mun-line',type:'line',source:'mun',paint:{'line-color':'#0f1420','line-width':1.2,'line-opacity':.8}},firstSymbol);
+    map.addSource('uf',{type:'geojson',data:{type:'FeatureCollection',features:[]}});
+    map.addLayer({id:'uf-line',type:'line',source:'uf',paint:{'line-color':'#ffb238','line-width':3}});
+    ready=true;loadIBGE();
+    CIDADES.forEach(([n,lng,lat],i)=>{const el=document.createElement('div');el.className='city';el.innerHTML=`<div class="f"></div><div class="n">${n}</div>`;
+      markers[i]=new maplibregl.Marker({element:el,anchor:'bottom'}).setLngLat([lng,lat]).addTo(map);});
+    const el=document.createElement('div');el.className='me';el.innerHTML='<div class="f"></div><div class="n">Você</div>';
+    me=new maplibregl.Marker({element:el,anchor:'bottom',offset:[0,-44]}).setLngLat([CIDADES[0][1],CIDADES[0][2]]);
+    if(S)paint();
+  });
+}
+// limites oficiais do IBGE: municípios e contorno do estado
+async function loadIBGE(){
+  try{
+    const [geo,nomes]=await Promise.all([
+      fetch('https://servicodados.ibge.gov.br/api/v3/malhas/estados/12?formato=application/vnd.geo+json&intrarregiao=municipio&qualidade=intermediaria').then(r=>r.json()),
+      fetch('https://servicodados.ibge.gov.br/api/v1/localidades/estados/12/municipios').then(r=>r.json())]);
+    const byId={};nomes.forEach(m=>byId[String(m.id)]=norm(m.nome));
+    geo.features.forEach(f=>{const nm=byId[String(f.properties.codarea)];f.properties.idx=CIDADES.findIndex(c=>norm(c[0])===nm);});
+    munGeo=geo;if(S)paint();
+  }catch(e){}
+  try{const uf=await fetch('https://servicodados.ibge.gov.br/api/v3/malhas/estados/12?formato=application/vnd.geo+json&qualidade=intermediaria').then(r=>r.json());map.getSource('uf').setData(uf);}catch(e){}
+}
+function paint(){
+  if(!ready||!S)return;
+  S.map.forEach((o,i)=>{const el=markers[i]&&markers[i].getElement();if(!el)return;
+    if(el.dataset.o!==o){el.querySelector('.f').innerHTML=face(o,30);if(el.dataset.o){el.classList.remove('flash');void el.offsetWidth;el.classList.add('flash');}el.dataset.o=o;}});
+  if(munGeo){munGeo.features.forEach(f=>{const i=f.properties.idx;f.properties.cor=i>=0?COL[S.map[i]]:'#666';});map.getSource('mun').setData(munGeo);}
+  const t=RT[S.role],mel=me.getElement();if(mel.dataset.t!==t){mel.querySelector('.f').innerHTML=face(t,46);mel.dataset.t=t;}
+  me.setLngLat([CIDADES[S.loc][1],CIDADES[S.loc][2]]).addTo(map);
+}
+function flyTo(i){if(!ready)return;const [,lng,lat]=CIDADES[i];
+  map.flyTo({center:[lng,lat],zoom:i===0?13.2:11.5,pitch:62,bearing:(Math.random()*80-40),duration:2600,essential:true});}
+function showAll(){if(ready)map.fitBounds(ACRE,{padding:40,pitch:50,bearing:-12,duration:2000});}
+
+/* ---------- jogo ---------- */
+let S=null,dragX=0,startX=null;
+const roleKeys=Object.keys(ROLES);
+const best=()=>LS.get('asr_best')||{};
+function menu(){
+  $('#menu').hidden=false;$('#game').hidden=true;$('#end').hidden=true;$('#sub').textContent='Cada escolha muda o estado';
+  const b=best();
+  $('#roles').innerHTML=roleKeys.map(k=>{const r=ROLES[k];return `<button class="role" style="--c:${r.c}" data-k="${k}">${face(RT[k],36)}<b>${r.n}</b><p>${r.d}</p><small>Recorde: ${b[k]||0} dias</small></button>`}).join('');
+  document.querySelectorAll('.role').forEach(el=>el.onclick=()=>start(el.dataset.k));
+  if(me)me.remove();showAll();
+}
+function start(role){
+  const base=['povo','policia','crime','politica'];
+  const owners=Array.from({length:N},(_,i)=>i<8?'povo':base[i%4]).sort(()=>Math.random()-.5);
+  S={role,day:1,st:[50,50,50,50],flags:{},used:{},map:owners,path:[],loc:0};
+  $('#menu').hidden=true;$('#end').hidden=true;$('#game').hidden=false;
+  $('#sub').textContent=ROLES[role].n;
+  $('#stats').innerHTML=ROLES[role].s.map((n,i)=>`<div class="stat"><span>${n}<b id="v${i}"></b></span><div class="bar"><i id="b${i}"></i></div><em class="dot" id="d${i}"></em></div>`).join('');
+  next();render();flyTo(0);
+}
+function pool(){
+  const deck=[...COMMON,...DECK[S.role]];
+  const ok=deck.filter(c=>(!c.req||S.flags[c.req])&&!S.used[c.t]);
+  const pri=ok.filter(c=>c.req);
+  if(pri.length&&Math.random()<.7)return pri;
+  if(ok.length)return ok;
+  S.used={};return deck.filter(c=>!c.req||S.flags[c.req]);
+}
+function next(){const p=pool();S.card=p[Math.floor(Math.random()*p.length)];S.used[S.card.t]=1;showCard();}
+function showCard(){
+  const c=S.card;
+  $('#av').innerHTML=face(whoType(c.who),44);
+  $('#who').textContent=c.who;$('#whoSub').textContent=c.req?'Consequência de uma escolha sua':'Em '+CIDADES[S.loc][0];
+  $('#text').textContent=c.t;
+  $('#cL span').textContent=c.L[0];$('#cR span').textContent=c.R[0];
+  const card=$('#card');card.style.transform='';card.style.opacity=1;
+}
+function preview(side){for(let i=0;i<4;i++){const d=$('#d'+i);if(!d)continue;if(!side){d.className='dot';continue}
+  const v=S.card[side][1][i];d.className='dot'+(v?' on':'')+(Math.abs(v)>=8?' big':'');}}
+function take(owner,n){S.map.map((o,i)=>o!==owner?i:-1).filter(i=>i>=0).sort(()=>Math.random()-.5).slice(0,n).forEach(i=>S.map[i]=owner);}
+function choose(side){
+  if(!S||$('#game').hidden)return;
+  const o=S.card[side],fx=o[1],ex=o[2]||{};
+  S.st=S.st.map((v,i)=>Math.max(0,Math.min(100,v+fx[i])));
+  if(ex.set){S.flags[ex.set]=1;S.path.push(o[0]);}
+  if(S.card.req)delete S.flags[S.card.req];
+  if(ex.take)take(ex.take[0],ex.take[1]*2);   // no Acre todo cada ação mexe em mais cidades
+  const cr=S.map.filter(x=>x==='crime').length;
+  if(cr>=11&&S.role!=='bandido')S.st[3]=Math.max(0,S.st[3]-2);
+  $('#news').innerHTML='<b>Manchete:</b> '+(ex.n||HEAD[Math.floor(Math.random()*HEAD.length)]);
+  S.day++;
+  const prev=S.loc;S.loc=Math.random()<.35?0:Math.floor(Math.random()*N);
+  preview(null);render();
+  if(S.loc!==prev)flyTo(S.loc);
+  const e=checkEnd();if(e)return finish(e);
+  next();
+}
+function checkEnd(){
+  for(const o of ['crime','policia','politica','povo'])if(S.map.filter(x=>x===o).length>=WIN)return CITY_ENDS[o];
+  for(let i=0;i<4;i++){if(S.st[i]<=0)return ENDS[i];if(S.st[i]>=100)return ENDS[i+'+'];}
+  return null;
+}
+function render(){
+  S.st.forEach((v,i)=>{const b=$('#b'+i);b.style.width=v+'%';b.className=(v<20||v>80)?'warn':'';$('#v'+i).textContent=v;});
+  $('#day').textContent='Dia '+S.day;$('#loc').textContent='Você está em '+CIDADES[S.loc][0];
+  $('#best').textContent='Recorde: '+(best()[S.role]||0)+' dias';
+  const cnt=o=>S.map.filter(x=>x===o).length;
+  $('#nPovo').textContent=cnt('povo');$('#nPolicia').textContent=cnt('policia');$('#nCrime').textContent=cnt('crime');$('#nPolitica').textContent=cnt('politica');
+  paint();
+}
+function finish([t,d]){
+  const b=best(),days=S.day-1,rec=days>(b[S.role]||0);
+  if(rec){b[S.role]=days;LS.set('asr_best',b);}
+  $('#game').hidden=true;const e=$('#end');e.hidden=false;e.style.display='flex';e.style.flexDirection='column';e.style.gap='12px';
+  const r=ROLES[S.role];
+  e.innerHTML=`<span class="tag">${r.n} · fim de jogo</span><h2>${t}</h2><p>${d}</p>
+  <div class="row"><span class="big">${days}</span><span>dias sobrevivendo no Acre${rec?' · <b style="color:var(--amber)">novo recorde!</b>':''}</span></div>
+  ${S.path.length?`<p>Escolhas que mudaram sua história:</p><div class="path">${S.path.map(p=>`<span>${p}</span>`).join('')}</div>`:''}
+  <div class="row"><button class="btn" id="again">Jogar de novo</button><button class="btn ghost" id="other">Trocar de personagem</button></div>`;
+  $('#again').onclick=()=>start(S.role);$('#other').onclick=menu;$('#again').focus();showAll();
+}
+
+// controles
+['L','R'].forEach(s=>{const b=$('#c'+s);b.onclick=()=>choose(s);b.onmouseenter=b.onfocus=()=>preview(s);b.onmouseleave=b.onblur=()=>preview(null);});
+document.addEventListener('keydown',e=>{if(e.key==='ArrowLeft')choose('L');if(e.key==='ArrowRight')choose('R');});
+const card=$('#card');
+card.addEventListener('pointerdown',e=>{startX=e.clientX;dragX=0;card.classList.add('dragging');card.setPointerCapture(e.pointerId)});
+card.addEventListener('pointermove',e=>{if(startX===null)return;dragX=e.clientX-startX;card.style.transform=`translateX(${dragX}px) rotate(${dragX/25}deg)`;preview(Math.abs(dragX)>30?(dragX<0?'L':'R'):null)});
+const up=()=>{if(startX===null)return;card.classList.remove('dragging');startX=null;
+  if(Math.abs(dragX)>90){const s=dragX<0?'L':'R';card.style.transform=`translateX(${dragX*3}px)`;card.style.opacity=0;setTimeout(()=>choose(s),180)}else{card.style.transform='';preview(null)}};
+card.addEventListener('pointerup',up);card.addEventListener('pointercancel',up);
+$('#tSat').onclick=e=>{if(!ready)return;const on=map.getLayoutProperty('sat','visibility')!=='visible';map.setLayoutProperty('sat','visibility',on?'visible':'none');e.currentTarget.classList.toggle('on',on);};
+$('#t3d').onclick=e=>{if(!ready)return;const on=!map.getTerrain();map.setTerrain(on?{source:'dem',exaggeration:3}:null);e.currentTarget.classList.toggle('on',on);};
+$('#tAll').onclick=showAll;
+
+initMap();menu();
+})();
+</script>
+</body>
+</html>
